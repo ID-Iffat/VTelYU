@@ -48,7 +48,7 @@ window.enableFCM = async function () {
     }
     localStorage.setItem("fcmToken", token);
     localStorage.setItem("notificationsEnabled", "true");
-    await fetch("https://rvm.iffatadibamusaffa.workers.dev/register-token", {method: "POST", body: token});
+    await fetch("https://vtelyu.iffatadibamusaffa.workers.dev/register-token", {method: "POST", body: token});
     console.log("FCM TOKEN:", token);
     console.log("Token Sent to Cloudflare");
     return token;
@@ -63,7 +63,7 @@ window.disableFCM = async function () {
   if (!token) {localStorage.setItem("notificationsEnabled", "false");
     return;
   }
-  try {await fetch("https://rvm.iffatadibamusaffa.workers.dev/unregister-token", {
+  try {await fetch("https://vtelyu.iffatadibamusaffa.workers.dev/unregister-token", {
       method: "POST",
       body: token
     });
