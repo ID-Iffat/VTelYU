@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>VTelYU</title>
+<!-- Fixed CSS Path -->
+<link rel="stylesheet" href="css/style.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.3.0/dist/chart.umd.min.js"></script>
+<!-- Fixed JS Path -->
+<script type="module" src="js/fcm.js"></script>
+</head>
+<body>
+
+<header>
+  <!-- Fixed Image Path -->
+  <img src="img/VTelYU.png" alt="VTelYU Logo" class="header-logo">
+  <div class="header-buttons">
+    <button class="enable-notif" id="notifBtn">Loading...</button>
+    <button class="enable-notif" id="locationBtn" onclick="window.location.href='location.html'">Lihat lokasi unit</button>
+  </div>
+</header>
+
+<main id="dashboard">
+  <section class="card" data-template="true" aria-label="RVM Unit">
+    <span class="status-text" style="display: none;">Offline</span>
+    <span class="total-val" style="display: none;">-</span>
+
+    <div class="card-header-custom">
+      <div class="status-title-row">
+        <span class="status-dot offline"></span>
+        <span class="rvm-title">Location Name</span>
+      </div>
+      <div class="rvm-meta">
+        <div class="rvm-uptime">Waktu Aktif : -</div>
+        <div class="rvm-lastseen">Terakhir Aktif : -</div>
+      </div>
+    </div>
+
+    <div class="card-body-custom">
+      <div class="card-left-col">
+        <div class="section-title">Volume sampah waktu nyata</div>
+        <div class="volume-bars-custom">
+          <div class="vol-bar-container">
+            <div class="vol-bar">
+              <!-- Fixed Image Path -->
+              <img src="img/plastik.png" class="bg-img" alt="botol plastik">
+              <div class="fill-plastic-bar" style="height:0%"></div>
+            </div>
+            <div class="vol-label">Plastik (<span class="plastic-text">-</span>%)</div>
+          </div>
+          <div class="vol-bar-container">
+            <div class="vol-bar">
+              <!-- Fixed Image Path -->
+              <img src="img/kaleng.png" class="bg-img" alt="kaleng">
+              <div class="fill-can-bar" style="height:0%"></div>
+            </div>
+            <div class="vol-label">Kaleng (<span class="can-text">-</span>%)</div>
+          </div>
+        </div>
+
+        <div class="section-title">Counting waktu nyata</div>
+        <div class="counting-boxes">
+          <div class="count-box">
+            <!-- Fixed Image Path -->
+            <img src="img/plastik.png" alt="plastik icon" class="icon-img">
+            <span class="plastic-val">-</span>
+          </div>
+          <div class="count-box">
+            <!-- Fixed Image Path -->
+            <img src="img/kaleng.png" alt="kaleng icon" class="icon-img">
+            <span class="can-val">-</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card-divider"></div>
+
+      <div class="card-right-col">
+        <div>
+          <div class="section-title">Total hari ini</div>
+          <div class="totals-container">
+            <div class="total-item">
+              <!-- Fixed Image Path -->
+              <img src="img/plastik.png" alt="plastik icon" class="icon-img-large">
+              <span><span class="total-plastic-cum">0</span>%</span>
+            </div>
+            <div class="total-item">
+              <!-- Fixed Image Path -->
+              <img src="img/kaleng.png" alt="kaleng icon" class="icon-img-large">
+              <span><span class="total-can-cum">0</span>%</span>
+            </div>
+          </div>
+        </div>
+        <button class="camera-btn camera-btn-custom">Live Feed</button>
+        <button class="history-btn history-btn-custom">History</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div id="cameraOverlay" aria-hidden="true">
+  <div class="camera-card">
+    <div class="header-row">
+      <h2 id="cameraTitle">Live Feed</h2>
+      <button id="closeCamera">Close</button>
+    </div>
+    <div class="feed-container">
+      <img id="cameraFeed" src="" alt="Camera Feed">
+    </div>
+  </div>
+</div>
+
+<div id="backdrop" aria-hidden="true"></div>
+<div id="historyContainer" aria-hidden="true">
+  <div id="historyHeader">
+    <h2>History for <span id="historyTitle">-</span></h2>
+    <div><button id="closeHistory">Close</button></div>
+  </div>
+  <div id="historyBody">
+    <div class="left-column">
+      <div class="chart-card">
+        <div class="chart-title">
+          Daily Chart | Sort by
+          <select id="dailyScale">
+            <option value="500" selected>500</option>
+            <option value="1000">1000</option>
+            <option value="5000">5000</option>
+          </select>
+        </div>
+        <canvas id="dailyChart"></canvas>
+      </div>
+
+      <div class="chart-card">
+        <div class="chart-title">
+          Weekly Chart | Sort by
+          <select id="weeklyScale">
+            <option value="5000" selected>5000</option>
+            <option value="10000">10000</option>
+            <option value="50000">50000</option>
+          </select>
+        </div>
+        <canvas id="weeklyChart"></canvas>
+      </div>
+    </div>
+    <div class="right-column">
+      <div class="table-card">
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Plastik</th>
+              <th>Kaleng</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody id="historyTable"></tbody>
+        </table>
+        <div class="history-nav">
+          <button id="prevWeekBtn" class="history-btn">⬅ Previous</button>
+          <button id="nextWeekBtn" class="history-btn">Next ➡</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API_URL = "https://vtelyu.iffatadibamusaffa.workers.dev";
+const FETCH_INTERVAL_MS = 5000;         
+function pctClamp(v){ v=Math.round(v); return isNaN(v)?0:Math.max(0,Math.min(100,v));}
+
+function formatUptime(sec){
+  sec = Number(sec)||0;
+  const d = Math.floor(sec/86400);
+  const h = Math.floor((sec%86400)/3600);
+  const m = Math.floor((sec%3600)/60);
+  if(d>0) return `${d}d ${h}h`;
+  if(h>0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+
+function formatLastSeen(ts){
+  if(!ts || ts === "-") return "-";
+  let timestampNumber = Number(ts);
+  if (timestampNumber < 10000000000) {timestampNumber = timestampNumber * 1000;}
+  const d = new Date(timestampNumber);
+  const day = String(d.getDate()).padStart(2,"0");
+  const month = String(d.getMonth()+1).padStart(2,"0");
+  const year = d.getFullYear();
+  const hours = String(d.getHours()).padStart(2,"0");
+  const minutes = String(d.getMinutes()).padStart(2,"0");
+  const seconds = String(d.getSeconds()).padStart(2,"0");
+  return `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
+}
+
+function updateCumulative(deviceId, type, currentVal) {
+  let store = JSON.parse(localStorage.getItem('rvm_cumulative') || '{}');
+  const todayStr = new Date().toLocaleDateString();
+  
+  if (store.date !== todayStr) {
+    store = { date: todayStr, data: {} };
+  }
+  if (!store.data[deviceId]) {
+    store.data[deviceId] = {
+      plastic: { cum: 0, last: 0 },
+      can: { cum: 0, last: 0 }
+    };
+  }
+  let record = store.data[deviceId][type];
+  if (currentVal < record.last && record.last >= 75) {
+    record.cum += record.last;
+  }
+  record.last = currentVal;
+  localStorage.setItem('rvm_cumulative', JSON.stringify(store));
+  return record.cum + currentVal;
+}
+
+function generateCardsFromDevices(devices){
+  const dashboard = document.getElementById('dashboard');
+  const template = dashboard.querySelector('[data-template="true"]');
+  
+  Array.from(dashboard.children).forEach(child => {
+    if(!child.hasAttribute('data-template')) dashboard.removeChild(child);
+  });
+
+  devices.forEach((device, index) => {
+    const clone = template.cloneNode(true);
+    clone.style.display = 'block'; 
+    clone.removeAttribute('data-template'); 
+    
+    // Assign an index loop sequence (1, 2, 3, 4...)[cite: 1]
+    const rvmIndex = index + 1; 
+    
+    clone.setAttribute('data-id', device.mac);
+    clone.setAttribute('data-locname', device.locationname);
+    clone.setAttribute('data-index', rvmIndex); // Stored for dynamic camera matching[cite: 1]
+    
+    clone.querySelector('.rvm-title').innerText = device.locationname || device.mac;
+    
+    clone.querySelector('.camera-btn').setAttribute('data-id', device.mac);
+    clone.querySelector('.history-btn').setAttribute('data-id', device.mac);
+    
+    clone.querySelector('.status-dot').classList.remove('online','offline');
+    clone.querySelector('.status-dot').classList.add(device.status === "online" ? "online" : "offline");
+    
+    dashboard.appendChild(clone);
+  });
+}
+
+function getDynamicColor(percentage) {
+  const boundedPct = Math.min(percentage, 90); 
+  const hue = 120 - ((boundedPct / 90) * 120); 
+  return `hsl(${hue}, 85%, 50%)`;
+}
+
+function updateCardFromValues(cardEl, values){
+  const plasticEl = cardEl.querySelector('.plastic-val');
+  const canEl = cardEl.querySelector('.can-val');
+  const totalEl = cardEl.querySelector('.total-val');
+  const fillPlastic = cardEl.querySelector('.fill-plastic-bar');
+  const fillCan = cardEl.querySelector('.fill-can-bar');
+  const plasticText = cardEl.querySelector('.plastic-text');
+  const canText = cardEl.querySelector('.can-text');
+  const cumPlasticText = cardEl.querySelector('.total-plastic-cum');
+  const cumCanText = cardEl.querySelector('.total-can-cum');
+  
+  const plastic = Number(values.plastic) || 0;
+  const can = Number(values.can) || 0;
+  const pPct = pctClamp(Number(values.pPct));
+  const cPct = pctClamp(Number(values.cPct));
+  
+  plasticEl.innerText = plastic;
+  canEl.innerText = can;
+  totalEl.innerText = plastic + can;
+  
+  if(fillPlastic) {
+    fillPlastic.style.height = pPct + '%';
+    fillPlastic.style.backgroundColor = getDynamicColor(pPct);
+  }
+  if(fillCan) {
+    fillCan.style.height = cPct + '%';
+    fillCan.style.backgroundColor = getDynamicColor(cPct);
+  }
+  
+  if(plasticText) plasticText.innerText = pPct;
+  if(canText) canText.innerText = cPct;
+  if(cumPlasticText) cumPlasticText.innerText = values.pCum || 0;
+  if(cumCanText) cumCanText.innerText = values.cCum || 0;
+}
+
+let fetchIntervalId = null;
+let isFetchingCounts = false;
+async function fetchCounts(){
+  if(isFetchingCounts) return;
+  isFetchingCounts = true;
+  try {
+    const resp = await fetch(API_URL, { cache: "no-store" });
+    if (!resp.ok) throw new Error(resp.status);
+    const rawData = await resp.json();
+    
+    const data = Object.keys(rawData).map(mac => ({
+      mac: mac,
+      ...rawData[mac]
+    }));
+
+    if (document.querySelectorAll('.card:not([data-template="true"])').length !== data.length) {
+      generateCardsFromDevices(data);
+    }
+    
+    data.forEach(device => {
+      const card = document.querySelector(`.card[data-id="${device.mac}"]`);
+      if(!card) return;
+      
+      const statusDot = card.querySelector('.status-dot');
+      const statusText = card.querySelector('.status-text');
+      const uptimeEl = card.querySelector('.rvm-uptime');
+      const lastSeenEl = card.querySelector('.rvm-lastseen');
+      
+      statusDot.classList.remove('online','offline');
+      if(device.status === "online"){
+        statusDot.classList.add('online');
+        statusText.innerText = "Online";
+      } else {
+        statusDot.classList.add('offline');
+        statusText.innerText = "Offline";
+      }
+      
+      uptimeEl.innerText ="Waktu Aktif : " + formatUptime(device.uptime);
+      lastSeenEl.innerText ="Terakhir Aktif : " + formatLastSeen(device.lastSeen);
+      
+      const values = {
+        plastic: device.plastic,
+        can: device.can,
+        pPct: device.plasticVolume,
+        cPct: device.canVolume,
+        pCum: updateCumulative(device.mac, 'plastic', Number(device.plasticVolume || 0)),
+        cCum: updateCumulative(device.mac, 'can', Number(device.canVolume || 0))
+      };
+      
+      updateCardFromValues(card, values);
+    });
+  } catch(err) {
+    console.error("Error fetching counts:", err);
+  }
+  isFetchingCounts = false;
+}
+
+function startAutoFetch(){ 
+  if(fetchIntervalId) clearInterval(fetchIntervalId); 
+  fetchCounts().catch(console.error); 
+  fetchIntervalId = setInterval(fetchCounts, FETCH_INTERVAL_MS);
+}
+
+function stopAutoFetch(){ 
+  if(fetchIntervalId) clearInterval(fetchIntervalId); 
+  fetchIntervalId = null;
+}
+
+// Fixed function to grab the dynamic index number (rvm1, rvm2, etc.)[cite: 1]
+function openCamera(locationName, rvmIndex) {
+  const overlay = document.getElementById('cameraOverlay');
+  const title = document.getElementById('cameraTitle');
+  const feed = document.getElementById('cameraFeed');
+
+  title.innerText = `Live Feed - ${locationName}`;
+  // Now looks into camera-mock/rvm1.jpg, camera-mock/rvm2.jpg, etc.[cite: 1]
+  feed.src = `camera-mock/rvm${rvmIndex}.jpg`; 
+  overlay.style.display = 'flex';
+  overlay.setAttribute('aria-hidden', 'false');
+}
+
+document.getElementById('closeCamera').addEventListener('click', () => {
+  const overlay = document.getElementById('cameraOverlay');
+  overlay.style.display = 'none';
+  overlay.setAttribute('aria-hidden', 'true');
+  document.getElementById('cameraFeed').src = ""; 
+});
+
+document.addEventListener('click', function(e) {
+  const btn = e.target.closest('.camera-btn');
+  if (btn) {
+    const card = btn.closest('.card');
+    const id = btn.getAttribute('data-id') || card.getAttribute('data-id');
+    const locName = card.getAttribute('data-locname') || id;
+    const rvmIndex = card.getAttribute('data-index') || "1"; // Fallback to 1 if missing[cite: 1]
+    if (id) openCamera(locName, rvmIndex);
+  }
+});
+
+// History & Charts
+let historyData=[], weekIndex=0, dailyChartInstance=null, weeklyChartInstance=null, dailyMax = 1000, weeklyMax = 10000;
+function fmtDate(rowDate){ 
+  if(typeof rowDate==='string'){
+    if(rowDate.includes('T')) return rowDate.split('T')[0]; 
+    return rowDate;
+  } 
+  return String(rowDate);
+}
+
+function destroyCharts(){
+  if(dailyChartInstance){ try{dailyChartInstance.destroy();} catch(e){} dailyChartInstance=null; }
+  if(weeklyChartInstance){ try{weeklyChartInstance.destroy();} catch(e){} weeklyChartInstance=null; }
+}
+
+function renderWeek(){
+  const start=weekIndex*7;
+  const weekData=historyData.slice(start,start+7);
+  if(!weekData||weekData.length===0){
+    document.getElementById('historyTable').innerHTML='<tr><td colspan="4">No data</td></tr>'; 
+    destroyCharts(); 
+    return;
+  }
+  const labels=weekData.map(r=>fmtDate(r.timestamp));
+  const plasticSeries=weekData.map(r=>Number(r.plastic||0));
+  const canSeries=weekData.map(r=>Number(r.can||0));
+  const totalDaily=weekData.map(r=>Number(r.plastic+r.can||0));
+  const totals=plasticSeries.map((p,i)=>p+(canSeries[i]||0));
+  const weeklyTotal=totals.reduce((s,v)=>s+v,0);
+  destroyCharts();
+
+  dailyChartInstance=new Chart(document.getElementById('dailyChart').getContext('2d'),{
+    type:'line',
+    data:{ labels, datasets:[
+      {label:'Plastik',data:plasticSeries,stack:'stack1',borderColor:'#3b82f6',backgroundColor:'#3b82f6'},
+      {label:'Kaleng',data:canSeries,stack:'stack2',borderColor:'#f59e0b',backgroundColor:'#f59e0b'},
+      {label:'Total',data:totalDaily,stack:'stack3',borderColor:'#10b981',backgroundColor:'#10b981'}
+      ]
+    },
+    options:{ 
+      responsive:true, 
+      maintainAspectRatio:false, 
+      interaction:{mode:'index',intersect:false}, 
+      plugins:{legend:{position:'top'}}, 
+      scales:{x:{},y:{min:0,max:dailyMax,ticks:{stepSize:dailyMax/10,precision:0}}}, 
+      datasets:{bar:{maxBarThickness:48}} 
+    }
+  });
+
+  weeklyChartInstance=new Chart(document.getElementById('weeklyChart').getContext('2d'),{
+    type:'bar',
+    data:{ labels:['Plastik','Kaleng','Total'], 
+    datasets:[{label:'7-day totals',
+               data:[plasticSeries.reduce((a,b)=>a+b,0),
+                     canSeries.reduce((a,b)=>a+b,0),
+                     weeklyTotal
+                    ],
+          borderRadius:6,
+          backgroundColor: ['#3b82f6','#f59e0b','#10b981']
+        }]
+      },
+    options:{ 
+      responsive:true, 
+      maintainAspectRatio:false, 
+      plugins:{legend:{display:false}}, 
+      scales:{y:{min:0,max:weeklyMax,ticks:{stepSize:weeklyMax/10,precision:0}}} 
+    }
+  });
+
+  const tableBody=document.getElementById('historyTable'); tableBody.innerHTML='';
+  weekData.forEach(row=>{ 
+    const p=Number(row.plastic||0), c=Number(row.can||0); 
+    tableBody.innerHTML+=`<tr><td>${fmtDate(row.timestamp)}</td><td>${p}</td><td>${c}</td><td>${p+c}</td></tr>`; 
+  });
+  
+  document.getElementById('nextWeekBtn').disabled=((start+7)>=historyData.length);
+  document.getElementById('prevWeekBtn').disabled=(weekIndex===0);
+}
+
+async function showHistory(deviceId, locationName){
+  document.getElementById('backdrop').style.display='block';
+  const hist = document.getElementById('historyContainer'); 
+  hist.style.display='block'; 
+  hist.setAttribute('aria-hidden','false');
+  document.getElementById('historyTitle').innerText = locationName;
+  
+  const tableBody = document.getElementById('historyTable'); 
+  tableBody.innerHTML='<tr><td colspan="4">Loading...</td></tr>';
+  
+  try{
+    const response = await fetch(`${API_URL}/history`, {cache:"no-store"});
+    if(!response.ok) throw new Error(response.status);
+    let data = await response.json();
+    
+    historyData = data
+      .filter(row => row.mac === deviceId)
+      .sort((a,b) => {
+        const parseDate = (dStr) => {
+          const [d, m, y] = dStr.split('-');
+          return new Date(`${y}-${m}-${d}`);
+        };
+        return parseDate(a.timestamp) - parseDate(b.timestamp);
+      });
+      
+    weekIndex=0; 
+    renderWeek();
+    document.getElementById("nextWeekBtn").onclick=()=>{if((weekIndex+1)*7<historyData.length){weekIndex++;renderWeek();}};
+    document.getElementById("prevWeekBtn").onclick=()=>{if(weekIndex>0){weekIndex--;renderWeek();}};
+  } catch(err){
+    console.error("History fetch error:",err); 
+    tableBody.innerHTML='<tr><td colspan="4">Error loading history.</td></tr>'; 
+    destroyCharts();
+  }
+}
+
+function updateNotifButton() {
+  const btn = document.getElementById("notifBtn");
+  const enabled = localStorage.getItem("notificationsEnabled") === "true";
+  if (enabled) {
+    btn.textContent = "Notifications ON";
+    btn.classList.remove("disabled");
+    btn.classList.add("enabled");
+  } else {
+    btn.textContent = "Notifications OFF";
+    btn.classList.remove("enabled");
+    btn.classList.add("disabled");
+  }
+}
+
+window.addEventListener("DOMContentLoaded", async () => {
+  startAutoFetch();
+  updateNotifButton();
+  document.getElementById("notifBtn").addEventListener("click", async () => {
+      const enabled = localStorage.getItem("notificationsEnabled") === "true";
+      if (enabled) {
+        if(window.disableFCM) await window.disableFCM();
+      } else {
+        if(window.enableFCM) {
+          const token = await window.enableFCM();
+          if (token) localStorage.setItem("notificationsEnabled", "true");
+        }
+      }
+      updateNotifButton();
+    });
+});
+
+function closeHistory(){
+  document.getElementById('backdrop').style.display='none'; 
+  const hist = document.getElementById('historyContainer'); 
+  hist.style.display='none'; 
+  hist.setAttribute('aria-hidden','true'); 
+  destroyCharts();
+}
+
+document.addEventListener('click',function(e){
+  const btn = e.target.closest('.history-btn'); 
+  if(btn){
+    const id = btn.getAttribute('data-id') || btn.closest('.card').getAttribute('data-id'); 
+    const locName = btn.closest('.card').getAttribute('data-locname') || id;
+    if(id) showHistory(id, locName);
+  }
+});
+
+document.getElementById('closeHistory').addEventListener('click',closeHistory);
+document.getElementById('backdrop').addEventListener('click',closeHistory);
+
+document.getElementById("dailyScale").addEventListener("change", (e)=>{dailyMax = Number(e.target.value); renderWeek(); });
+document.getElementById("weeklyScale").addEventListener("change", (e)=>{weeklyMax = Number(e.target.value); renderWeek(); });
+document.addEventListener('visibilitychange',()=>{document.hidden?stopAutoFetch():startAutoFetch(); });
+</script>
+
+</body>
+</html>
