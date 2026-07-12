@@ -18,7 +18,7 @@
     <button class="menu-trigger" id="menuBtn">Menu ▾</button>
     <div class="dropdown-content" id="dropdownMenu">
       <button class="enable-notif" id="notifBtn">Loading...</button>
-      <!-- <button class="enable-notif" id="locationBtn" onclick="window.location.href='location.html'">Lihat lokasi unit</button> -->
+      <button class="enable-notif disabled" id="locationToggleBtn" style="display: none;">Akses Lokasi OFF</button>
       <button class="enable-notif" id="viewToggleBtn">Lihat lokasi unit</button>
     <div id="authSection" style="display: none; align-items: center; gap: 8px;">
       <button class="enable-notif" id="logoutBtn" style="padding: 10px 14px; background: #ef4444; border: none; color: white; border-radius: 12px; cursor: pointer;">
@@ -117,13 +117,8 @@
   </section>
 </main>
 
-<!-- Replace everything between </main> and <div id="cameraOverlay"> with this: -->
-
 <div id="map-container" style="display: none; position: relative; height: calc(100vh - 100px); padding: 20px;">
-  <!-- The actual map -->
   <div id="map" style="width: 100%; height: 100%; border-radius: 22px; z-index: 1;"></div>
-
-  <!-- Proximity Alert -->
   <div id="proximity-alert" style="display: none; position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 2000; background: #10b981; color: white; padding: 10px 20px; border-radius: 20px; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
     Kamu berada di dekat RVM!
   </div>
@@ -294,6 +289,7 @@ const authSection = document.getElementById('authSection');
 const userEmailSpan = document.getElementById('userEmail');
 
 // Kept your old Worker API URL for History fetches (if history isn't moved to Firebase yet)
+// database on firebase is a paid service, so I will keep the history data on cloudflare worker for now.
 const API_URL = "https://vtelyu.iffatadibamusaffa.workers.dev"; 
 
 function startApp() {
@@ -726,21 +722,22 @@ function initMap() {
   return mapInstance;
 }
 
-// Ensure your toggleView updates the text correctly
 function toggleView() {
   const dashboard = document.getElementById('dashboard');
   const mapContainer = document.getElementById('map-container');
   const toggleBtn = document.getElementById('viewToggleBtn');
+  const locationBtn = document.getElementById('locationToggleBtn');
 
   isMapView = !isMapView;
 
   if (isMapView) {
     dashboard.style.display = 'none';
     mapContainer.style.display = 'block';
-    toggleBtn.innerText = "Tampilan setiap unit"; // Updated text
+    toggleBtn.innerText = "Tampilan setiap unit";
+    locationBtn.style.display = 'block';
     
     if (!mapInitialized) {
-      map = initMap(); // Store the map instance
+      map = initMap();
       mapInitialized = true;
     } else {
       map.invalidateSize();
@@ -748,7 +745,8 @@ function toggleView() {
   } else {
     dashboard.style.display = 'grid';
     mapContainer.style.display = 'none';
-    toggleBtn.innerText = "Tampilan lokasi unit"; // Updated text
+    toggleBtn.innerText = "Tampilan lokasi unit";
+    locationBtn.style.display = 'none';
   }
 }
 
@@ -812,6 +810,101 @@ document.addEventListener('click', function(e){
       document.getElementById('active-card-container').style.display = 'none';
     }
   }
+});
+
+let watchId = null;
+let userMarker = null;
+let isLocationEnabled = false;
+const PROXIMITY_THRESHOLD = 50; // Alert triggers if user is within 50 meters of an RVM
+
+function toggleLocationTracking() {
+  const btn = document.getElementById('locationToggleBtn');
+  
+  if (!isLocationEnabled) {
+    if ("geolocation" in navigator) {
+      // Start tracking the user
+      watchId = navigator.geolocation.watchPosition(
+        (position) => {
+          const userLat = position.coords.latitude;
+          const userLng = position.coords.longitude;
+          const userLatLng = L.latLng(userLat, userLng);
+
+          if (mapInitialized && map) {
+            // 1. Create or update the blue user marker
+            if (!userMarker) {
+              const userIcon = L.divIcon({
+                className: 'user-marker',
+                html: '<div style="background-color: #3b82f6; width: 16px; height: 16px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.5);"></div>',
+                iconSize: [22, 22],
+                iconAnchor: [11, 11]
+              });
+              userMarker = L.marker(userLatLng, { icon: userIcon, zIndexOffset: 1000 }).addTo(map);
+            } else {
+              userMarker.setLatLng(userLatLng);
+            }
+
+            // 2. Check distance to all RVM units
+            let isNear = false;
+            latestDevices.forEach(device => {
+              if (device.location && device.location.includes(',')) {
+                const [dLat, dLng] = device.location.split(',').map(Number);
+                const rvmLatLng = L.latLng(dLat, dLng);
+                
+                // Leaflet's built-in distance calculator (returns meters)
+                const distance = map.distance(userLatLng, rvmLatLng);
+                if (distance <= PROXIMITY_THRESHOLD) {
+                  isNear = true;
+                }
+              }
+            });
+
+            // 3. Show or hide the proximity alert based on distance
+            document.getElementById('proximity-alert').style.display = isNear ? 'block' : 'none';
+          }
+        },
+        (error) => {
+          console.error("Location error:", error);
+          alert("Gagal mengakses lokasi. Pastikan izin lokasi diaktifkan di browser/perangkat Anda.");
+          disableLocationTracking();
+        },
+        { enableHighAccuracy: true, maximumAge: 10000 }
+      );
+      
+      // Update Button State
+      isLocationEnabled = true;
+      btn.textContent = "Akses Lokasi ON";
+      btn.classList.add("enabled");
+      btn.classList.remove("disabled");
+    } else {
+      alert("Browser Anda tidak mendukung fitur lokasi.");
+    }
+  } else {
+    disableLocationTracking();
+  }
+}
+
+function disableLocationTracking() {
+  if (watchId !== null) {
+    navigator.geolocation.clearWatch(watchId);
+    watchId = null;
+  }
+  if (userMarker && map) {
+    map.removeLayer(userMarker);
+    userMarker = null;
+  }
+  document.getElementById('proximity-alert').style.display = 'none';
+  isLocationEnabled = false;
+  
+  const btn = document.getElementById('locationToggleBtn');
+  btn.textContent = "Akses Lokasi OFF";
+  btn.classList.remove("enabled");
+  btn.classList.add("disabled");
+}
+
+// Attach the click event to the new button
+document.getElementById('locationToggleBtn').addEventListener('click', (e) => {
+  toggleLocationTracking();
+  e.stopPropagation(); // Prevents the menu from closing when toggling
 });
 
 document.getElementById('menuBtn').addEventListener('click', (e) => {
