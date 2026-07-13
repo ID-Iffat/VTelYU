@@ -18,8 +18,8 @@
     <button class="menu-trigger" id="menuBtn">Menu ▾</button>
     <div class="dropdown-content" id="dropdownMenu">
       <button class="enable-notif" id="notifBtn">Loading...</button>
-      <button class="enable-notif disabled" id="locationToggleBtn" style="display: none;">Akses Lokasi OFF</button>
       <button class="enable-notif" id="viewToggleBtn">Lihat lokasi unit</button>
+      <button class="enable-notif disabled" id="locationToggleBtn" style="display: none;">Akses Lokasi OFF</button>
     <div id="authSection" style="display: none; align-items: center; gap: 8px;">
       <button class="enable-notif" id="logoutBtn" style="padding: 10px 14px; background: #ef4444; border: none; color: white; border-radius: 12px; cursor: pointer;">
         <span id="userEmail" style="font-size: 0.85rem; color: #000000;"></span> Logout &rarr;
@@ -245,6 +245,12 @@
     </div>
     <div class="right-column">
       <div class="table-card">
+        <div id="dateFilterContainer" class="date-filter-container">
+          <input type="date" id="startDateFilter" class="date-input">
+          <span>to</span>
+          <input type="date" id="endDateFilter" class="date-input">
+          <button id="applyDateFilter" class="history-btn filter-btn">Filter</button>
+        </div>
         <table>
           <thead>
             <tr>
@@ -373,7 +379,8 @@ document.getElementById('loginBtn').addEventListener('click', () => {
   
   signInWithEmailAndPassword(auth, email, password)
     .catch((error) => {
-      document.getElementById('errorMsg').innerText = "Login failed: " + error.message;
+      document.getElementById('errorMsg').innerText = "Login failed: Invalid email or password.";
+      // document.getElementById('errorMsg').innerText = "Login failed: " + error.message;
     });
 });
 
@@ -537,7 +544,18 @@ document.addEventListener('click', function(e) {
 });
 
 // History & Charts
+let fullHistoryData = []; // NEW: Stores the original fetch to allow filtering without re-fetching
 let historyData=[], weekIndex=0, dailyChartInstance=null, weeklyChartInstance=null, dailyMax = 1000, weeklyMax = 10000;
+function parseDateString(dateStr) { // Helper function to safely read DD-MM-YYYY strings globally
+  if (!dateStr) return 0;
+  const dateOnly = dateStr.split(' ')[0]; 
+  const parts = dateOnly.split('-');
+  if (parts.length === 3 && parts[2].length === 4) {
+     return new Date(`${parts[2]}-${parts[1]}-${parts[0]}`).getTime();
+  }
+  return new Date(dateStr).getTime();
+}
+
 function fmtDate(rowDate){ 
   if(typeof rowDate==='string'){
     if(rowDate.includes('T')) return rowDate.split('T')[0]; 
@@ -633,23 +651,89 @@ async function showHistory(deviceId, locationName){
   };
   const maskedDeviceId = maskMac(deviceId);
   
-  try {
+try {
     const response = await fetch(`https://vtelyu.iffatadibamusaffa.workers.dev/history`, {
       cache: "no-store"
     });
     if(!response.ok) throw new Error(response.status);
     let data = await response.json();
     
-    // 2. Filter using the MASKED device ID
-    historyData = data
+    // Filter using the MASKED device ID and sort
+    fullHistoryData = data
       .filter(row => row.mac === maskedDeviceId) 
-      .sort((a,b) => {
-        // ... rest of your sorting logic ...
-        return new Date(a.timestamp) - new Date(b.timestamp);
-      });
+      .sort((a, b) => parseDateString(a.timestamp) - parseDateString(b.timestamp));
+
+    if (fullHistoryData.length > 0) {
+      const oldestDate = new Date(parseDateString(fullHistoryData[0].timestamp));
+      const newestDate = new Date(parseDateString(fullHistoryData[fullHistoryData.length - 1].timestamp));
       
-    weekIndex=0; 
+      const formatForInput = (d) => {
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      };
+
+      const oldestDateStr = formatForInput(oldestDate);
+      const newestDateStr = formatForInput(newestDate);
+
+      const startInput = document.getElementById('startDateFilter');
+      const endInput = document.getElementById('endDateFilter');
+
+      startInput.addEventListener('change', () => {
+        endInput.min = startInput.value;
+      });
+
+      // When end date changes, the start date cannot be later than it
+      endInput.addEventListener('change', () => {
+        startInput.max = endInput.value;
+      });
+
+      document.getElementById('applyDateFilter').addEventListener('click', () => {
+        const startVal = startInput.value;
+        const endVal = endInput.value;
+        
+        if (!startVal || !endVal) {
+          alert("Silakan pilih kedua tanggal untuk menyaring (Please select both dates).");
+          return;
+        }
+        
+        const startTimestamp = new Date(startVal).getTime();
+        const endTimestamp = new Date(endVal + 'T23:59:59').getTime(); 
+
+        // Final fallback validation to prevent reversed range
+        if (startTimestamp > endTimestamp) {
+          alert("Tanggal mulai tidak boleh lebih besar dari tanggal akhir (Start date cannot be after end date).");
+          return;
+        }
+
+        // Filter against the uncensored dataset
+        historyData = fullHistoryData.filter(row => {
+          const rowTime = parseDateString(row.timestamp);
+          return rowTime >= startTimestamp && rowTime <= endTimestamp;
+        });
+        
+        // Reset pagination and redraw charts
+        weekIndex = 0;
+        renderWeek();
+      });
+
+      // Set values
+      startInput.value = oldestDateStr;
+      endInput.value = newestDateStr;
+
+      // Restrict users from picking dates outside the available dataset
+      startInput.min = oldestDateStr;
+      startInput.max = newestDateStr;
+      endInput.min = oldestDateStr;
+      endInput.max = newestDateStr;
+    }
+    
+    // Load the full dataset into the active view
+    historyData = [...fullHistoryData];
+    weekIndex = 0; 
     renderWeek();
+    
     document.getElementById("nextWeekBtn").onclick=()=>{if((weekIndex+1)*7<historyData.length){weekIndex++;renderWeek();}};
     document.getElementById("prevWeekBtn").onclick=()=>{if(weekIndex>0){weekIndex--;renderWeek();}};
   } catch(err) {
@@ -921,6 +1005,23 @@ document.getElementById('menuBtn').addEventListener('click', (e) => {
 // Close dropdown when clicking elsewhere
 window.addEventListener('click', () => {
   document.getElementById('dropdownMenu').style.display = 'none';
+});
+
+document.getElementById('applyDateFilter').addEventListener('click', () => {
+  const startVal = document.getElementById('startDateFilter').value;
+  const endVal = document.getElementById('endDateFilter').value;
+  if (!startVal || !endVal) {
+    alert("Silakan pilih kedua tanggal untuk menyaring (Please select both dates).");
+    return;
+  }
+  const startTimestamp = new Date(startVal).getTime();
+  const endTimestamp = new Date(endVal + 'T23:59:59').getTime(); 
+  historyData = fullHistoryData.filter(row => {
+    const rowTime = parseDateString(row.timestamp);
+    return rowTime >= startTimestamp && rowTime <= endTimestamp;
+  });
+  weekIndex = 0;
+  renderWeek();
 });
 
 // Authentication state update for logout visibility

@@ -514,6 +514,47 @@ main{
   border:1px solid var(--border);
 }
 
+/* Date Filter UI */
+.date-filter-container {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-light);
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+}
+
+.date-filter-container span {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.date-input {
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  outline: none;
+  color-scheme: dark; /* Forces the browser's calendar popup into dark mode */
+}
+
+.date-input:focus {
+  border-color: var(--accent);
+}
+
+.filter-btn {
+  margin: 0;
+  padding: 8px 18px;
+  font-size: 0.9rem;
+  width: auto; /* Overrides the 100% width from your standard .history-btn */
+}
+
 table{
   width:100%;
   border-collapse:collapse;
